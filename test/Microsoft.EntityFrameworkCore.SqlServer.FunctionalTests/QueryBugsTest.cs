@@ -1672,6 +1672,61 @@ WHERE ([c].[FirstName] = @__firstName_0) AND ([c].[LastName] = @__8__locals1_det
 
         #endregion
 
+        #region Bug7499
+
+        [Fact]
+        public virtual void Where_on_navigation_is_derived_type_with_casting_for_property_access()
+        {
+            using (CreateDatabase7499())
+            {
+                using (var ctx = new MyContext7499(_options))
+                {
+                    var email = "abc@def.com";
+                    var query = ctx.Messages.Where(m => m.Sender is EmailSender7499 && ((EmailSender7499)m.Sender).Email == email).ToList();
+
+                    Assert.Equal(1, query.Count);
+                }
+            }
+        }
+
+        public class Message7499
+        {
+            public int Id { get; set; }
+            public Sender7499 Sender { get; set; }
+        }
+
+        public class Sender7499
+        {
+            public int Id { get; set; }
+        }
+
+        public class EmailSender7499 : Sender7499
+        {
+            public string Email { get; set; }
+        }
+
+        private class MyContext7499 : DbContext
+        {
+            public MyContext7499(DbContextOptions options)
+                : base(options)
+            {
+            }
+
+            public DbSet<Message7499> Messages { get; set; }
+            public DbSet<Sender7499> Senders { get; set; }
+            public DbSet<EmailSender7499> EmailSenders { get; set; }
+        }
+
+        private SqlServerTestStore CreateDatabase7499()
+            => CreateTestStore(() => new MyContext7499(_options),
+                context =>
+                {
+                    
+                    context.SaveChanges();
+                });
+
+        #endregion
+
         private DbContextOptions _options;
 
         private SqlServerTestStore CreateTestStore<TContext>(
