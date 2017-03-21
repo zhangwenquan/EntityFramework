@@ -3,7 +3,7 @@
 
 using System.Collections.Generic;
 using System.Linq;
-using Microsoft.DotNet.Cli.CommandLine;
+using Microsoft.Extensions.CommandLineUtils;
 using Xunit;
 
 using EFCommand = Microsoft.EntityFrameworkCore.Tools.Commands.RootCommand;

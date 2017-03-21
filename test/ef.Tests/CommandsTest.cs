@@ -3,8 +3,8 @@
 
 using System.Collections.Generic;
 using System.Linq;
-using Microsoft.DotNet.Cli.CommandLine;
 using Microsoft.EntityFrameworkCore.Tools.Commands;
+using Microsoft.Extensions.CommandLineUtils;
 using Xunit;
 
 namespace Microsoft.EntityFrameworkCore.Tools

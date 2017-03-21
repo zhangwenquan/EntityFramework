@@ -39,6 +39,12 @@
     </Compile>
   </ItemGroup>
 
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.CommandLineUtils.Sources" Version="$(AspNetCoreVersion)">
+      <PrivateAssets>All</PrivateAssets>
+    </PackageReference>
+  </ItemGroup>
+
   <ItemGroup Condition=" '$(TargetFramework)' == 'net451' ">
     <Reference Include="Microsoft.CSharp" />
   </ItemGroup>
