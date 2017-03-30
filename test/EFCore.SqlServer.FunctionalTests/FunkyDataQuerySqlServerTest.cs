@@ -47,6 +47,16 @@ END <> [c].[NullableBool]) OR [c].[NullableBool] IS NULL",
                 Sql);
         }
 
+        public override void String_ends_with_on_argument_with_wildcard_constant()
+        {
+            base.String_ends_with_on_argument_with_wildcard_constant();
+        }
+
+        public override void String_ends_with_on_argument_with_wildcard_parameter()
+        {
+            base.String_ends_with_on_argument_with_wildcard_parameter();
+        }
+
         protected override void ClearLog() => TestSqlLoggerFactory.Reset();
 
         private const string FileLineEnding = @"

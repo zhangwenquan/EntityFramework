@@ -32,8 +32,18 @@ namespace Microsoft.EntityFrameworkCore.Query.ExpressionTranslators.Internal
                         methodCallExpression.Object,
                         Expression.Add(methodCallExpression.Arguments[0], Expression.Constant("%", typeof(string)), _concat)),
                     Expression.Equal(
-                        new SqlFunctionExpression("CHARINDEX", typeof(int), new[] { patternExpression, methodCallExpression.Object }),
-                        Expression.Constant(1)));
+                        //new SqlFunctionExpression("CHARINDEX", typeof(int), new[] { patternExpression, methodCallExpression.Object }),
+                        //Expression.Constant(1)));
+                        new SqlFunctionExpression(
+                            "LEFT",
+                            // ReSharper disable once PossibleNullReferenceException
+                            methodCallExpression.Object.Type,
+                            new[]
+                            {
+                                methodCallExpression.Object,
+                                new SqlFunctionExpression("LEN", typeof(int), new[] { patternExpression })
+                            }),
+                        patternExpression));
 
                 return patternConstantExpression != null
                     ? (string)patternConstantExpression.Value == string.Empty
