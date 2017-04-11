@@ -1,4 +1,4 @@
-// Copyright (c) .NET Foundation. All rights reserved.
+﻿// Copyright (c) .NET Foundation. All rights reserved.
 // Licensed under the Apache License, Version 2.0. See License.txt in the project root for license information.
 
 using System;
@@ -44,7 +44,15 @@ namespace Microsoft.EntityFrameworkCore
     ///         is discovered by convention, you can override the <see cref="OnModelCreating(ModelBuilder)" /> method.
     ///     </para>
     /// </remarks>
-    public class DbContext : IDisposable, IInfrastructure<IServiceProvider>, IDbContextPoolable
+    public class DbContext :
+        IDisposable,
+        IInfrastructure<IServiceProvider>,
+        IInfrastructure<IDbSetInitializer>,
+        IInfrastructure<IEntityFinderSource>,
+        IInfrastructure<IAsyncQueryProvider>,
+        IInfrastructure<IChangeDetector>,
+        IInfrastructure<IStateManager>,
+        IDbContextPoolable
     {
         private readonly DbContextOptions _options;
 
@@ -52,16 +60,17 @@ namespace Microsoft.EntityFrameworkCore
         private IDbSetInitializer _setInitializer;
         private IEntityFinderSource _entityFinderSource;
         private ChangeTracker _changeTracker;
-        private DatabaseFacade _database;
+        private IChangeDetector _changeDetector;
         private IStateManager _stateManager;
         private IEntityGraphAttacher _graphAttacher;
-        private IModel _model;
-        private IInterceptingLogger<LoggerCategory.Update> _updateLogger;
         private IAsyncQueryProvider _queryProvider;
-        private IDbContextPool _dbContextPool;
+        private IModel _model;
+        private DatabaseFacade _database;
 
         private bool _initializing;
         private IServiceScope _serviceScope;
+        private IInterceptingLogger<LoggerCategory.Update> _updateLogger;
+        private IDbContextPool _dbContextPool;
         private bool _disposed;
 
         /// <summary>
@@ -75,7 +84,7 @@ namespace Microsoft.EntityFrameworkCore
             : this(new DbContextOptions<DbContext>())
         {
         }
-                    
+
         /// <summary>
         ///     <para>
         ///         Initializes a new instance of the <see cref="DbContext" /> class using the specified options.
@@ -85,7 +94,7 @@ namespace Microsoft.EntityFrameworkCore
         /// </summary>
         /// <param name="options">The options for this context.</param>
         public DbContext([NotNull] DbContextOptions options)
-        {                                    
+        {
             Check.NotNull(options, nameof(options));
 
             if (!options.ContextType.GetTypeInfo().IsAssignableFrom(GetType().GetTypeInfo()))
@@ -95,6 +104,14 @@ namespace Microsoft.EntityFrameworkCore
 
             _options = options;
 
+            // This service is not stored in _setInitializer as this may not be the service provider that will be used
+            // as the internal service provider going forward, because at this time OnConfiguring has not yet been called.
+            // Mostly that isn't a problem because set initialization is done by our internal services, but in the case
+            // where some of those services are replaced, this could initialize set using non-replaced services.
+            // In this rare case if this is a problem for the app, then the app can just not use this mechanism to create
+            // DbSet instances, and this code becomes a no-op. However, if this set initializer is then saved and used later
+            // for the Set method, then it makes the problem bigger because now an app is using the non-replaced services
+            // even when it doesn't need to.
             ServiceProviderCache.Instance.GetOrAdd(options, providerRequired: false)
                 .GetRequiredService<IDbSetInitializer>()
                 .InitializeSets(this);
@@ -104,7 +121,10 @@ namespace Microsoft.EntityFrameworkCore
             => _stateManager
                ?? (_stateManager = InternalServiceProvider.GetRequiredService<IStateManager>());
 
-        internal IAsyncQueryProvider QueryProvider
+        private IChangeDetector ChangeDetector
+            => _changeDetector ?? (_changeDetector = InternalServiceProvider.GetRequiredService<IChangeDetector>());
+
+        private IAsyncQueryProvider QueryProvider
             => _queryProvider ?? (_queryProvider = this.GetService<IAsyncQueryProvider>());
 
         private IServiceProvider InternalServiceProvider
@@ -159,7 +179,7 @@ namespace Microsoft.EntityFrameworkCore
                 contextServices.Initialize(scopedServiceProvider, options, this);
 
                 _updateLogger = scopedServiceProvider.GetRequiredService<IInterceptingLogger<LoggerCategory.Update>>();
-                
+
                 return contextServices;
             }
             finally
@@ -178,6 +198,36 @@ namespace Microsoft.EntityFrameworkCore
         ///     </para>
         /// </summary>
         IServiceProvider IInfrastructure<IServiceProvider>.Instance => InternalServiceProvider;
+
+        /// <summary>
+        ///     This API supports the Entity Framework Core infrastructure and is not intended to be used
+        ///     directly from your code. This API may change or be removed in future releases.
+        /// </summary>
+        IDbSetInitializer IInfrastructure<IDbSetInitializer>.Instance => DbSetInitializer;
+
+        /// <summary>
+        ///     This API supports the Entity Framework Core infrastructure and is not intended to be used
+        ///     directly from your code. This API may change or be removed in future releases.
+        /// </summary>
+        IEntityFinderSource IInfrastructure<IEntityFinderSource>.Instance => EntityFinderSource;
+
+        /// <summary>
+        ///     This API supports the Entity Framework Core infrastructure and is not intended to be used
+        ///     directly from your code. This API may change or be removed in future releases.
+        /// </summary>
+        IAsyncQueryProvider IInfrastructure<IAsyncQueryProvider>.Instance => QueryProvider;
+
+        /// <summary>
+        ///     This API supports the Entity Framework Core infrastructure and is not intended to be used
+        ///     directly from your code. This API may change or be removed in future releases.
+        /// </summary>
+        IStateManager IInfrastructure<IStateManager>.Instance => StateManager;
+
+        /// <summary>
+        ///     This API supports the Entity Framework Core infrastructure and is not intended to be used
+        ///     directly from your code. This API may change or be removed in future releases.
+        /// </summary>
+        IChangeDetector IInfrastructure<IChangeDetector>.Instance => ChangeDetector;
 
         /// <summary>
         ///     <para>
@@ -467,9 +517,7 @@ namespace Microsoft.EntityFrameworkCore
         {
             if (entry.EntityState == EntityState.Detached)
             {
-                (_graphAttacher
-                 ?? (_graphAttacher = InternalServiceProvider.GetRequiredService<IEntityGraphAttacher>()))
-                    .AttachGraph(entry, entityState);
+                GraphAttacher.AttachGraph(entry, entityState);
             }
             else
             {
@@ -484,15 +532,16 @@ namespace Microsoft.EntityFrameworkCore
         {
             if (entry.EntityState == EntityState.Detached)
             {
-                await (_graphAttacher
-                       ?? (_graphAttacher = InternalServiceProvider.GetRequiredService<IEntityGraphAttacher>()))
-                    .AttachGraphAsync(entry, entityState, cancellationToken);
+                await GraphAttacher.AttachGraphAsync(entry, entityState, cancellationToken);
             }
             else
             {
                 await entry.SetEntityStateAsync(entityState, acceptChanges: true, cancellationToken: cancellationToken);
             }
         }
+
+        private IEntityGraphAttacher GraphAttacher =>
+            _graphAttacher ?? (_graphAttacher = InternalServiceProvider.GetRequiredService<IEntityGraphAttacher>());
 
         /// <summary>
         ///     Begins tracking the given entity, and any other reachable entities that are
@@ -1142,13 +1191,19 @@ namespace Microsoft.EntityFrameworkCore
                 throw new InvalidOperationException(CoreStrings.InvalidSetType(typeof(TEntity).ShortDisplayName()));
             }
 
-            return (_setInitializer
-                    ?? (_setInitializer = InternalServiceProvider.GetRequiredService<IDbSetInitializer>())).CreateSet<TEntity>(this);
+            return DbSetInitializer.CreateSet<TEntity>(this);
         }
 
+        private IDbSetInitializer DbSetInitializer
+            => _setInitializer
+               ?? (_setInitializer = InternalServiceProvider.GetRequiredService<IDbSetInitializer>());
+
         private IEntityFinder Finder(Type entityType)
-            => (_entityFinderSource
-                ?? (_entityFinderSource = InternalServiceProvider.GetRequiredService<IEntityFinderSource>())).Create(this, entityType);
+            => EntityFinderSource.Create(this, entityType);
+
+        private IEntityFinderSource EntityFinderSource
+            => _entityFinderSource
+               ?? (_entityFinderSource = InternalServiceProvider.GetRequiredService<IEntityFinderSource>());
 
         /// <summary>
         ///     Finds an entity with the given primary key values. If an entity with the given primary key values
