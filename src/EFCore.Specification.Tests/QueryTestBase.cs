@@ -7188,7 +7188,7 @@ namespace Microsoft.EntityFrameworkCore.Specification.Tests
         }
 
         [ConditionalFact]
-        public virtual void OrderBy_skip_take_level_1()
+        public virtual void OrderBy_skip_take()
         {
             AssertQuery<Customer>(
                 cs => cs.OrderBy(c => c.ContactTitle)
@@ -7200,7 +7200,7 @@ namespace Microsoft.EntityFrameworkCore.Specification.Tests
         }
 
         [ConditionalFact]
-        public virtual void OrderBy_skip_take_level_2()
+        public virtual void OrderBy_skip_take_take()
         {
             AssertQuery<Customer>(
                 cs => cs.OrderBy(c => c.ContactTitle)
@@ -7208,6 +7208,36 @@ namespace Microsoft.EntityFrameworkCore.Specification.Tests
                     .Skip(5)
                     .Take(8)
                     .Take(3),
+                assertOrder: true,
+                entryCount: 3);
+        }
+
+        [ConditionalFact]
+        public virtual void OrderBy_skip_take_take_take_take()
+        {
+            AssertQuery<Customer>(
+                cs => cs.OrderBy(c => c.ContactTitle)
+                    .ThenBy(c => c.ContactName)
+                    .Skip(5)
+                    .Take(15)
+                    .Take(10)
+                    .Take(8)
+                    .Take(5),
+                assertOrder: true,
+                entryCount: 5);
+        }
+
+        [ConditionalFact]
+        public virtual void OrderBy_skip_take_skip_take_skip()
+        {
+            AssertQuery<Customer>(
+                cs => cs.OrderBy(c => c.ContactTitle)
+                    .ThenBy(c => c.ContactName)
+                    .Skip(5)
+                    .Take(15)
+                    .Skip(2)
+                    .Take(8)
+                    .Skip(5),
                 assertOrder: true,
                 entryCount: 3);
         }
@@ -7226,20 +7256,56 @@ namespace Microsoft.EntityFrameworkCore.Specification.Tests
         }
 
         [ConditionalFact]
-        public virtual void OrderBy_skip_take_level_3()
+        public virtual void OrderBy_coalesce_take_distinct()
+        {
+            AssertQuery<Product>(
+                ps => ps.OrderBy(p => p.UnitPrice ?? 0)
+                    .Take(15)
+                    .Distinct(),
+                assertOrder: false,
+                entryCount: 15);
+        }
+
+        [ConditionalFact]
+        public virtual void OrderBy_coalesce_skip_take_distinct()
+        {
+            AssertQuery<Product>(
+                ps => ps.OrderBy(p => p.UnitPrice ?? 0)
+                    .Skip(5)
+                    .Take(15)
+                    .Distinct(),
+                assertOrder: false,
+                entryCount: 15);
+        }
+
+        [ConditionalFact]
+        public virtual void OrderBy_coalesce_skip_take_distinct_take()
+        {
+            AssertQuery<Product>(
+                ps => ps.OrderBy(p => p.UnitPrice ?? 0)
+                    .Skip(5)
+                    .Take(15)
+                    .Distinct()
+                    .Take(5),
+                assertOrder: false,
+                entryCount: 5);
+        }
+
+        [ConditionalFact]
+        public virtual void OrderBy_skip_take_distinct_orderby_take()
         {
             AssertQuery<Customer>(
                 cs => cs.OrderBy(c => c.ContactTitle)
                     .ThenBy(c => c.ContactName)
                     .Skip(5)
                     .Take(15)
-                    .Take(10)
-                    .Take(8)
-                    .Take(5),
-                assertOrder: true,
-                entryCount: 5);
+                    .Distinct()
+                    .OrderBy(c => c.ContactTitle)
+                    .Take(8),
+                assertOrder: false,
+                entryCount: 8);
         }
-
+        
         [ConditionalFact]
         public virtual void No_orderby_added_for_fully_translated_manually_constructed_LOJ()
         {
